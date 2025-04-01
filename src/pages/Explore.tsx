@@ -85,7 +85,6 @@ const Explore = () => {
         
         <p className="text-lg text-similarteia-muted mb-8">
           Discover connections between books created by users in the SimilarTeia community.
-          {RELAY_URL.includes('localhost') && <span className="text-sm block mt-2 text-similarteia-accent"> Connected to local relay: {RELAY_URL}</span>}
         </p>
         
         <div className="space-y-6">

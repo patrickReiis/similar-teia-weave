@@ -41,7 +41,14 @@ export const connectToRelay = (): Promise<WebSocket> => {
       resolve(socket);
       return;
     }
+    
+    // Close existing socket if it's not in OPEN state
+    if (socket) {
+      socket.close();
+      socket = null;
+    }
 
+    console.log(`Attempting to connect to relay: ${RELAY_URL}`);
     socket = new WebSocket(RELAY_URL);
 
     socket.onopen = () => {
@@ -128,19 +135,48 @@ export const subscribeToEvents = async (
     const ws = await connectToRelay();
     const subId = Math.random().toString(36).substring(2);
     
+    // Make sure we're connected before continuing
+    if (ws.readyState !== WebSocket.OPEN) {
+      console.log("Waiting for WebSocket connection to be ready...");
+      // Wait for the connection to be established
+      await new Promise<void>((resolve, reject) => {
+        const checkState = () => {
+          if (ws.readyState === WebSocket.OPEN) {
+            resolve();
+          } else if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+            reject(new Error("WebSocket closed before connection was established"));
+          } else {
+            // Still connecting, check again in 100ms
+            setTimeout(checkState, 100);
+          }
+        };
+        checkState();
+      });
+    }
+    
+    console.log(`WebSocket ready, subscribing with ID: ${subId}`);
+    
     const messageHandler = (message: MessageEvent) => {
-      const data = JSON.parse(message.data);
-      if (data[0] === "EVENT" && data[1] === subId) {
-        onEvent(data[2]);
+      try {
+        const data = JSON.parse(message.data);
+        if (data[0] === "EVENT" && data[1] === subId) {
+          console.log("Received matching event:", data[2]);
+          onEvent(data[2]);
+        }
+      } catch (error) {
+        console.error("Error handling WebSocket message:", error);
       }
     };
     
     ws.addEventListener("message", messageHandler);
     ws.send(JSON.stringify(["REQ", subId, filter]));
+    console.log("Subscription request sent:", JSON.stringify(["REQ", subId, filter]));
     
     // Return unsubscribe function
     return () => {
-      ws.send(JSON.stringify(["CLOSE", subId]));
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(["CLOSE", subId]));
+      }
       ws.removeEventListener("message", messageHandler);
     };
   } catch (error) {
