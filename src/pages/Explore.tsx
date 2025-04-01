@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Layout } from "@/components/Layout";
 import { SimilarityEventCard } from "@/components/SimilarityEventCard";
 import { NostrEvent, SimilarityEvent, parseEventToSimilarity, SIMILARITY_EVENT_KIND, RELAY_URL, subscribeToEvents } from "@/lib/nostr";
@@ -13,6 +13,10 @@ const Explore = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRetrying, setIsRetrying] = useState(false);
   const [unsubscribeFn, setUnsubscribeFn] = useState<(() => void) | null>(null);
+  // Add this ref to track if we've received any events
+  const hasReceivedEvents = useRef(false);
+  // Add a ref to track loading timeout
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchEvents = useCallback(async () => {
     // Clean up previous subscription if it exists
@@ -21,8 +25,16 @@ const Explore = () => {
       setUnsubscribeFn(null);
     }
     
+    // Clean up previous timeout if exists
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+    
     setIsLoading(true);
     setIsRetrying(true);
+    // Reset the ref when starting a new fetch
+    hasReceivedEvents.current = false;
     
     try {
       console.log(`Connecting to relay: ${RELAY_URL}`);
@@ -38,6 +50,9 @@ const Explore = () => {
           const similarityEvent = parseEventToSimilarity(event);
           if (similarityEvent) {
             console.log("Parsed similarity event:", similarityEvent);
+            // Mark that we've received at least one event
+            hasReceivedEvents.current = true;
+            
             setEvents(prev => {
               // Check if we already have this event
               if (prev.some(e => e.id === similarityEvent.id)) {
@@ -45,6 +60,10 @@ const Explore = () => {
               }
               return [...prev, similarityEvent];
             });
+            
+            // Stop loading immediately after receiving the first event
+            setIsLoading(false);
+            setIsRetrying(false);
           } else {
             console.warn("Failed to parse event as similarity event:", event);
           }
@@ -53,12 +72,13 @@ const Explore = () => {
       
       setUnsubscribeFn(() => unsubscribe);
       
-      // After 5 seconds, consider the initial load complete
-      setTimeout(() => {
+      // Set a timeout to stop the loading state even if no events are received
+      loadingTimeoutRef.current = setTimeout(() => {
+        // Only set loading to false if it hasn't been set already by event reception
         setIsLoading(false);
         setIsRetrying(false);
         
-        if (events.length === 0) {
+        if (!hasReceivedEvents.current) {
           console.log("No events received after timeout");
           toast({
             title: "Relay Status",
@@ -79,7 +99,7 @@ const Explore = () => {
       setIsLoading(false);
       setIsRetrying(false);
     }
-  }, [events.length, unsubscribeFn]);
+  }, [unsubscribeFn]);
   
   // Initial fetch
   useEffect(() => {
@@ -90,6 +110,11 @@ const Explore = () => {
       if (unsubscribeFn) {
         console.log("Unsubscribing from events");
         unsubscribeFn();
+      }
+      
+      // Clean up timeout on unmount
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
       }
     };
   }, [fetchEvents]);
