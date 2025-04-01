@@ -2,8 +2,9 @@
 import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { SimilarityEventCard } from "@/components/SimilarityEventCard";
-import { NostrEvent, SimilarityEvent, parseEventToSimilarity, SIMILARITY_EVENT_KIND, subscribeToEvents } from "@/lib/nostr";
+import { NostrEvent, SimilarityEvent, parseEventToSimilarity, SIMILARITY_EVENT_KIND, RELAY_URL, subscribeToEvents } from "@/lib/nostr";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "@/components/ui/use-toast";
 
 const Explore = () => {
   const [events, setEvents] = useState<SimilarityEvent[]>([]);
@@ -14,11 +15,19 @@ const Explore = () => {
     
     const fetchEvents = async () => {
       try {
+        console.log(`Connecting to relay: ${RELAY_URL}`);
+        toast({
+          title: "Connecting to Relay",
+          description: `Attempting to connect to ${RELAY_URL}`,
+        });
+        
         const unsubscribe = await subscribeToEvents(
           { kinds: [SIMILARITY_EVENT_KIND] },
           (event: NostrEvent) => {
+            console.log("Received event:", event);
             const similarityEvent = parseEventToSimilarity(event);
             if (similarityEvent) {
+              console.log("Parsed similarity event:", similarityEvent);
               setEvents(prev => {
                 // Check if we already have this event
                 if (prev.some(e => e.id === similarityEvent.id)) {
@@ -26,6 +35,8 @@ const Explore = () => {
                 }
                 return [...prev, similarityEvent];
               });
+            } else {
+              console.warn("Failed to parse event as similarity event:", event);
             }
           }
         );
@@ -33,13 +44,28 @@ const Explore = () => {
         // After 5 seconds, consider the initial load complete
         setTimeout(() => {
           setIsLoading(false);
+          if (events.length === 0) {
+            console.log("No events received after timeout");
+            toast({
+              title: "Relay Status",
+              description: "Connected, but no similarity events found",
+            });
+          } else {
+            console.log(`Found ${events.length} events`);
+          }
         }, 5000);
         
         return () => {
+          console.log("Unsubscribing from events");
           unsubscribe();
         };
       } catch (error) {
         console.error("Failed to fetch events:", error);
+        toast({
+          title: "Connection Error",
+          description: `Failed to connect to relay: ${error instanceof Error ? error.message : "Unknown error"}`,
+          variant: "destructive",
+        });
         setIsLoading(false);
       }
     };
@@ -59,6 +85,7 @@ const Explore = () => {
         
         <p className="text-lg text-similarteia-muted mb-8">
           Discover connections between books created by users in the SimilarTeia community.
+          {RELAY_URL.includes('localhost') && <span className="text-sm block mt-2 text-similarteia-accent"> Connected to local relay: {RELAY_URL}</span>}
         </p>
         
         <div className="space-y-6">

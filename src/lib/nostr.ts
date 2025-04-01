@@ -28,7 +28,8 @@ export interface SimilarityEvent {
   similarity: number;
 }
 
-export const RELAY_URL = "wss://ditto.pub/relay";
+// Update the relay URL to connect to the local relay
+export const RELAY_URL = "ws://localhost:4036/relay";
 export const SIMILARITY_EVENT_KIND = 1729;
 
 let socket: WebSocket | null = null;
