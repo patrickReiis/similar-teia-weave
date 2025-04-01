@@ -28,37 +28,63 @@ export interface SimilarityEvent {
   similarity: number;
 }
 
-// Update the relay URL to connect to the local relay
-export const RELAY_URL = "ws://localhost:4036/relay";
+// Update the relay URL
+export const RELAY_URL = "wss://relay.damus.io";
 export const SIMILARITY_EVENT_KIND = 1729;
+export const MAX_RETRY_COUNT = 3;
+export const RETRY_DELAY = 2000;
 
 let socket: WebSocket | null = null;
 let pubkey: string | null = null;
+let connectionAttempts = 0;
 
 export const connectToRelay = (): Promise<WebSocket> => {
   return new Promise((resolve, reject) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
+      console.log("Using existing open WebSocket connection");
+      connectionAttempts = 0;
       resolve(socket);
       return;
     }
     
-    // Close existing socket if it's not in OPEN state
+    // Close existing socket if it exists
     if (socket) {
+      console.log("Closing existing socket");
       socket.close();
       socket = null;
     }
 
-    console.log(`Attempting to connect to relay: ${RELAY_URL}`);
+    connectionAttempts++;
+    console.log(`Connection attempt ${connectionAttempts} to relay: ${RELAY_URL}`);
+    
     socket = new WebSocket(RELAY_URL);
 
     socket.onopen = () => {
       console.log("Connected to relay:", RELAY_URL);
+      connectionAttempts = 0;
       resolve(socket as WebSocket);
     };
 
     socket.onerror = (error) => {
       console.error("WebSocket error:", error);
-      reject(error);
+      
+      // If we haven't exceeded max retries, try again
+      if (connectionAttempts < MAX_RETRY_COUNT) {
+        console.log(`Retrying connection in ${RETRY_DELAY}ms (attempt ${connectionAttempts}/${MAX_RETRY_COUNT})`);
+        setTimeout(() => {
+          if (socket) {
+            socket.close();
+            socket = null;
+          }
+          // Create a new promise chain for retry
+          connectToRelay()
+            .then(resolve)
+            .catch(reject);
+        }, RETRY_DELAY);
+      } else {
+        connectionAttempts = 0;
+        reject(error);
+      }
     };
 
     socket.onclose = () => {
@@ -131,58 +157,83 @@ export const subscribeToEvents = async (
   filter: { kinds: number[]; [key: string]: any },
   onEvent: (event: NostrEvent) => void
 ): Promise<() => void> => {
-  try {
-    const ws = await connectToRelay();
-    const subId = Math.random().toString(36).substring(2);
-    
-    // Make sure we're connected before continuing
-    if (ws.readyState !== WebSocket.OPEN) {
-      console.log("Waiting for WebSocket connection to be ready...");
-      // Wait for the connection to be established
-      await new Promise<void>((resolve, reject) => {
-        const checkState = () => {
-          if (ws.readyState === WebSocket.OPEN) {
-            resolve();
-          } else if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-            reject(new Error("WebSocket closed before connection was established"));
-          } else {
-            // Still connecting, check again in 100ms
-            setTimeout(checkState, 100);
+  let retryCount = 0;
+  let ws: WebSocket;
+  const subId = Math.random().toString(36).substring(2);
+  let messageHandler: (message: MessageEvent) => void;
+  
+  const setupSubscription = async (): Promise<() => void> => {
+    try {
+      console.log(`Setting up subscription (attempt ${retryCount + 1})`);
+      ws = await connectToRelay();
+      
+      // Make sure we're connected before continuing
+      if (ws.readyState !== WebSocket.OPEN) {
+        console.log("Waiting for WebSocket connection to be ready...");
+        // Wait for the connection to be established
+        await new Promise<void>((resolve, reject) => {
+          const checkState = () => {
+            if (ws.readyState === WebSocket.OPEN) {
+              resolve();
+            } else if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+              reject(new Error("WebSocket closed before connection was established"));
+            } else {
+              // Still connecting, check again in 100ms
+              setTimeout(checkState, 100);
+            }
+          };
+          checkState();
+        });
+      }
+      
+      console.log(`WebSocket ready, subscribing with ID: ${subId}`);
+      
+      messageHandler = (message: MessageEvent) => {
+        try {
+          const data = JSON.parse(message.data);
+          if (data[0] === "EVENT" && data[1] === subId) {
+            console.log("Received matching event:", data[2]);
+            onEvent(data[2]);
+          } else if (data[0] === "EOSE" && data[1] === subId) {
+            console.log("End of stored events");
           }
-        };
-        checkState();
-      });
-    }
-    
-    console.log(`WebSocket ready, subscribing with ID: ${subId}`);
-    
-    const messageHandler = (message: MessageEvent) => {
-      try {
-        const data = JSON.parse(message.data);
-        if (data[0] === "EVENT" && data[1] === subId) {
-          console.log("Received matching event:", data[2]);
-          onEvent(data[2]);
+        } catch (error) {
+          console.error("Error handling WebSocket message:", error);
         }
-      } catch (error) {
-        console.error("Error handling WebSocket message:", error);
+      };
+      
+      ws.addEventListener("message", messageHandler);
+      ws.send(JSON.stringify(["REQ", subId, filter]));
+      console.log("Subscription request sent:", JSON.stringify(["REQ", subId, filter]));
+      
+      // Return unsubscribe function
+      return () => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(["CLOSE", subId]));
+        }
+        if (ws) {
+          ws.removeEventListener("message", messageHandler);
+        }
+      };
+    } catch (error) {
+      console.error(`Subscription attempt ${retryCount + 1} failed:`, error);
+      
+      // If we haven't exceeded max retries, try again
+      if (retryCount < MAX_RETRY_COUNT) {
+        retryCount++;
+        console.log(`Retrying subscription in ${RETRY_DELAY}ms (attempt ${retryCount}/${MAX_RETRY_COUNT})`);
+        return new Promise((resolve) => {
+          setTimeout(async () => {
+            const unsubscribe = await setupSubscription();
+            resolve(unsubscribe);
+          }, RETRY_DELAY);
+        });
       }
-    };
-    
-    ws.addEventListener("message", messageHandler);
-    ws.send(JSON.stringify(["REQ", subId, filter]));
-    console.log("Subscription request sent:", JSON.stringify(["REQ", subId, filter]));
-    
-    // Return unsubscribe function
-    return () => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(["CLOSE", subId]));
-      }
-      ws.removeEventListener("message", messageHandler);
-    };
-  } catch (error) {
-    console.error("Failed to subscribe to events:", error);
-    throw error;
-  }
+      throw error;
+    }
+  };
+  
+  return setupSubscription();
 };
 
 export const parseEventToSimilarity = (event: NostrEvent): SimilarityEvent | null => {
