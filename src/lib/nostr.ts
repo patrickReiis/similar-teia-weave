@@ -37,23 +37,29 @@ let pubkey: string | null = null;
 let connectionPromise: Promise<WebSocket> | null = null;
 
 export const connectToRelay = (): Promise<WebSocket> => {
+  // If we already have a valid connection promise and socket, return it
   if (connectionPromise && socket && (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)) {
+    console.log("Reusing existing connection promise");
     return connectionPromise;
   }
   
+  // Create a new connection promise
   connectionPromise = new Promise((resolve, reject) => {
+    // If we have an existing socket that's not in OPEN state, close it
     if (socket && socket.readyState !== WebSocket.OPEN) {
       console.log("Closing existing socket that's not open");
       socket.close();
       socket = null;
     }
     
+    // If we already have an open connection, use it
     if (socket && socket.readyState === WebSocket.OPEN) {
       console.log("Using existing open WebSocket connection");
       resolve(socket);
       return;
     }
     
+    // Create a new WebSocket connection
     console.log(`Connecting to relay: ${RELAY_URL}`);
     
     socket = new WebSocket(RELAY_URL);
@@ -142,26 +148,38 @@ export const subscribeToEvents = async (
   const subId = Math.random().toString(36).substring(2);
   
   try {
+    console.log(`Setting up subscription with ID: ${subId}`);
+    // Get WebSocket connection
     const ws = await connectToRelay();
     
+    // Ensure the connection is open
     if (ws.readyState !== WebSocket.OPEN) {
       console.log("Waiting for WebSocket connection to be ready...");
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
-          reject(new Error("Timed out waiting for connection to be established"));
+          reject(new Error("Timed out waiting for connection"));
         }, 5000);
         
-        const openHandler = () => {
-          clearTimeout(timeout);
-          resolve();
+        const checkState = () => {
+          if (ws.readyState === WebSocket.OPEN) {
+            clearTimeout(timeout);
+            resolve();
+          } else if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+            clearTimeout(timeout);
+            reject(new Error("WebSocket closed before connection was established"));
+          } else {
+            // Still connecting, check again in 100ms
+            setTimeout(checkState, 100);
+          }
         };
         
-        ws.addEventListener("open", openHandler, { once: true });
+        checkState();
       });
     }
     
     console.log(`WebSocket ready, subscribing with ID: ${subId}`);
     
+    // Set up message handler for this subscription
     const messageHandler = (message: MessageEvent) => {
       try {
         const data = JSON.parse(message.data);
@@ -169,24 +187,30 @@ export const subscribeToEvents = async (
           console.log("Received matching event:", data[2]);
           onEvent(data[2]);
         } else if (data[0] === "EOSE" && data[1] === subId) {
-          console.log("End of stored events");
+          console.log("End of stored events for subscription:", subId);
         }
       } catch (error) {
         console.error("Error handling WebSocket message:", error);
       }
     };
     
+    // Add the message handler
     ws.addEventListener("message", messageHandler);
+    
+    // Send the subscription request
     ws.send(JSON.stringify(["REQ", subId, filter]));
     console.log("Subscription request sent:", JSON.stringify(["REQ", subId, filter]));
     
+    // Return a function to clean up the subscription
     return () => {
+      console.log(`Cleaning up subscription: ${subId}`);
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(["CLOSE", subId]));
+        console.log(`Sent CLOSE for subscription: ${subId}`);
+      } else {
+        console.log(`WebSocket not open, couldn't send CLOSE for: ${subId}`);
       }
-      if (ws) {
-        ws.removeEventListener("message", messageHandler);
-      }
+      ws.removeEventListener("message", messageHandler);
     };
   } catch (error) {
     console.error(`Subscription failed:`, error);

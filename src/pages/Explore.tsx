@@ -69,7 +69,6 @@ const Explore = () => {
       setUnsubscribeFn(() => unsubscribe);
       
       // Set a timeout to stop the loading state even if no events are received
-      // Use a shorter timeout to prevent the page from becoming unresponsive
       loadingTimeoutRef.current = setTimeout(() => {
         setIsLoading(false);
         setIsRetrying(false);
@@ -81,7 +80,11 @@ const Explore = () => {
             description: "Connected, but no similarity events found",
           });
         } else {
-          console.log(`Found ${events.length} events`);
+          // Use a callback to get the latest events length
+          setEvents(currentEvents => {
+            console.log(`Found ${currentEvents.length} events`);
+            return currentEvents;
+          });
         }
       }, 5000);
       
@@ -95,7 +98,7 @@ const Explore = () => {
       setIsLoading(false);
       setIsRetrying(false);
     }
-  }, [unsubscribeFn]);
+  }, []); // Remove dependency on unsubscribeFn to break the cycle
   
   // Initial fetch
   useEffect(() => {
