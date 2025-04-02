@@ -85,13 +85,13 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
           </div>
         ) : (
           <>
-            <div className="flex gap-4 mb-4">
+            <div className="flex gap-4 mb-4 relative">
               <div className="flex-shrink-0">
                 {book1.cover ? (
                   <img
                     src={book1.cover}
                     alt={book1.title}
-                    className="w-20 h-28 object-cover rounded shadow"
+                    className="w-20 h-28 object-cover rounded shadow-md hover:shadow-lg transition-all"
                   />
                 ) : (
                   <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
@@ -111,29 +111,73 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
                   ISBN: {book1.isbn}
                 </p>
               </div>
+              
+              {/* Add a visual connector between books */}
+              <div className="absolute -bottom-3 left-10 right-10 flex justify-center pointer-events-none opacity-70">
+                <svg height="10" width="100%" className="text-gray-300">
+                  <line x1="0" y1="5" x2="100%" y2="5" stroke="currentColor" strokeWidth="1" strokeDasharray="4" />
+                </svg>
+              </div>
             </div>
 
-            <div className="mb-4">
-              <div className="relative h-2 bg-gray-200 rounded-full my-4">
-                <div
-                  className="absolute h-2 bg-similarteia-accent rounded-full"
-                  style={{ width: similarityBarWidth }}
-                />
+            <div className="mb-6 mt-5">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs text-muted-foreground">0%</span>
+                <div className="flex flex-col items-center">
+                  <div className={`${
+                    event.similarity < 0.3 
+                      ? 'bg-white border-blue-400 text-blue-500' 
+                      : event.similarity < 0.7 
+                        ? 'bg-white border-purple-500 text-purple-600'
+                        : 'bg-white border-similarteia-accent text-similarteia-accent'
+                  } shadow-md rounded-full px-4 py-1 border mb-1 transition-all hover:shadow-lg`}>
+                    <span className="font-medium">
+                      {Math.round(event.similarity * 100)}% Similarity
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground italic">
+                    {event.similarity < 0.3 
+                      ? 'Slightly Similar'
+                      : event.similarity < 0.5
+                        ? 'Moderately Similar'
+                        : event.similarity < 0.7
+                          ? 'Quite Similar'
+                          : event.similarity < 0.9
+                            ? 'Very Similar'
+                            : 'Extremely Similar'
+                    }
+                  </span>
+                </div>
+                <span className="text-xs text-muted-foreground">100%</span>
               </div>
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>0% Similar</span>
-                <span>{Math.round(event.similarity * 100)}% Similar</span>
-                <span>100% Similar</span>
+              
+              <div className="relative h-3 bg-gray-100 rounded-full overflow-hidden shadow-inner">
+                <div
+                  className="absolute h-full transition-all duration-1000 ease-out"
+                  style={{ 
+                    width: similarityBarWidth,
+                    background: event.similarity < 0.3
+                      ? 'linear-gradient(90deg, rgba(96,165,250,0.5) 0%, rgba(96,165,250,1) 100%)'
+                      : event.similarity < 0.7
+                        ? 'linear-gradient(90deg, rgba(145,115,220,0.5) 0%, rgba(145,115,220,1) 100%)'
+                        : 'linear-gradient(90deg, rgba(155,135,245,0.5) 0%, rgba(155,135,245,1) 100%)',
+                    boxShadow: event.similarity < 0.3
+                      ? '0 0 8px rgba(96,165,250,0.6)'
+                      : event.similarity < 0.7
+                        ? '0 0 8px rgba(145,115,220,0.6)'
+                        : '0 0 8px rgba(155,135,245,0.6)'
+                  }}
+                />
               </div>
             </div>
             
-            <div className="flex gap-4">
+            <div className="flex gap-4 relative">
               <div className="flex-shrink-0">
                 {book2.cover ? (
                   <img
                     src={book2.cover}
                     alt={book2.title}
-                    className="w-20 h-28 object-cover rounded shadow"
+                    className="w-20 h-28 object-cover rounded shadow-md hover:shadow-lg transition-all"
                   />
                 ) : (
                   <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
@@ -152,6 +196,13 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
                 <p className="text-xs text-muted-foreground mt-1">
                   ISBN: {book2.isbn}
                 </p>
+              </div>
+              
+              {/* Add a visual connector between books */}
+              <div className="absolute -top-3 left-10 right-10 flex justify-center pointer-events-none opacity-70">
+                <svg height="10" width="100%" className="text-gray-300">
+                  <line x1="0" y1="5" x2="100%" y2="5" stroke="currentColor" strokeWidth="1" strokeDasharray="4" />
+                </svg>
               </div>
             </div>
             
