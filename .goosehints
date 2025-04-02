@@ -1,0 +1,82 @@
+# SimilarTeia Project Guide
+
+## Project Overview
+SimilarTeia is a web application that allows users to create and explore connections/similarities between books. The application uses the Nostr protocol for decentralized social networking and data sharing. Users can:
+
+1. Login with Nostr extensions/wallets
+2. Create "similarity events" between two books
+3. Explore similarity connections created by the community
+4. Rate the degree of similarity between books
+
+### Future Expansion
+While the current implementation focuses on books only, the project is designed to eventually support:
+- Music similarities
+- Movie similarities
+- Cross-media similarities (books-to-movies, music-to-books, etc.)
+
+This phased approach allows for a focused initial release while setting the foundation for a comprehensive similarity network across different media types.
+
+## Technical Stack
+- React with TypeScript
+- Vite for building and development
+- React Router for navigation
+- Tailwind CSS for styling
+- shadcn-ui components library
+- Nostr protocol for decentralized data
+- WebSocket connections to Nostr relays
+
+## Key Components
+- `NostrContext.tsx` - Manages authentication and Nostr connections
+- `nostr.ts` - Library for Nostr protocol interactions (connect, publish, subscribe)
+- Main Pages:
+  - Index - Home/landing page
+  - Create - For creating new book similarity events
+  - Explore - For discovering similarity events
+  
+## Important Concepts
+- Nostr Protocol - Decentralized network for social content
+- Book Similarity Events - Custom Nostr events (kind 1729) that connect two books
+- WebSocket Relays - Communication channels for Nostr events (using relay.damus.io)
+
+## Architecture
+- Context-based state management
+- Component-based UI architecture
+- WebSockets for real-time data
+- React Query for data fetching and caching
+
+## Nostr Event Example
+Below is an example of a book similarity event in the Nostr protocol format:
+
+```json
+{
+  "kind": 1729,
+  "id": "31552bd0459c07811858af3f3035507b98bacbdf05df17a9dcedbe4c8025db27",
+  "pubkey": "47259076c85f9240e852420d7213c95e95102f1de929fb60f33a2c32570c98c4",
+  "created_at": 1743545886,
+  "tags": [
+    ["i", "isbn:9781729527085"],
+    ["kind", "isbn"],
+    ["i", "isbn:1639940251"],
+    ["kind", "isbn"],
+    ["similarity", "0.92"]
+  ],
+  "content": "Those books are related because they talk about the laws of the universe. The Kybalion is more focused on it while The Land of the Gods focuses on it in a more fiction way, but without getting too much fiction so you don't waste your time.\nHighly recommend both of them.",
+  "sig": "d94b75131963fd81d58350e5f160254a780f2c27c36ffe7c1c1616cec799f31bc79b09515087d353fd4c6d1845819267db7bbef5cb77aab62cd553f6358dc1be"
+}
+```
+
+Key components of the event:
+- `kind: 1729` - Custom event kind for similarity events
+- `tags` - Contains two items with ISBNs and a similarity rating
+- `content` - The user's explanation of why these books are similar
+- Other fields are standard Nostr event metadata (id, pubkey, timestamp, signature)
+
+## Development Guidelines
+- Authentication requires a Nostr browser extension
+- Events are published to and fetched from Nostr relays
+- Book data structure includes ISBN, title, and author information
+- Similarity events contain two books and a similarity rating (0-1)
+- Future media types will follow a similar pattern but with different identifiers:
+  - Movies will likely use IMDb IDs or similar standardized identifiers
+  - Music will likely use MusicBrainz IDs, Spotify URIs, or similar identifiers
+  - All media types will maintain the same event structure with appropriate `kind` tags
