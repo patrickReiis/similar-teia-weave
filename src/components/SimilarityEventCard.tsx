@@ -97,23 +97,41 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
                     src={book1.cover}
                     alt={book1.title}
                     className="w-20 h-28 object-cover rounded shadow-md hover:shadow-lg transition-all"
+                    loading="eager"
                     onError={(e) => {
                       console.log('Image failed to load:', e.currentTarget.src);
                       
-                      // Try another ISBN format for covers
-                      const isbn = book1.isbn.replace(/[-\s]/g, '').trim();
-                      // Replace the source with a different format cover
-                      e.currentTarget.src = `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`;
+                      // Get the original URL to avoid infinite retries
+                      const originalSrc = e.currentTarget.src;
                       
-                      // If this one fails too, show the fallback
-                      e.currentTarget.onerror = () => {
+                      // Try another path format for OpenLibrary covers if this isn't already that format
+                      if (!originalSrc.includes('/covers/b/isbn/')) {
+                        // Try the direct ISBN cover endpoint
+                        const cleanIsbn = book1.isbn.replace(/[-\s]/g, '').trim();
+                        const newSrc = `https://covers.openlibrary.org/b/isbn/${cleanIsbn}-M.jpg`;
+                        console.log(`Trying alternate cover URL: ${newSrc}`);
+                        e.currentTarget.src = newSrc;
+                        
+                        // If this one fails too, show the fallback
+                        e.currentTarget.onerror = () => {
+                          console.log('Alternate image URL failed too, showing fallback');
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.parentElement.innerHTML = `
+                            <div class="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
+                              <span class="text-xs text-muted-foreground">No Cover</span>
+                            </div>
+                          `;
+                        };
+                      } else {
+                        // We're already using the direct ISBN fallback, show the no-cover element
+                        console.log('Already using ISBN fallback, showing no-cover element');
                         e.currentTarget.style.display = 'none';
                         e.currentTarget.parentElement.innerHTML = `
                           <div class="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
                             <span class="text-xs text-muted-foreground">No Cover</span>
                           </div>
                         `;
-                      };
+                      }
                     }}
                   />
                 ) : (
@@ -201,23 +219,41 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
                     src={book2.cover}
                     alt={book2.title}
                     className="w-20 h-28 object-cover rounded shadow-md hover:shadow-lg transition-all"
+                    loading="eager"
                     onError={(e) => {
                       console.log('Image failed to load:', e.currentTarget.src);
                       
-                      // Try another ISBN format for covers
-                      const isbn = book2.isbn.replace(/[-\s]/g, '').trim();
-                      // Replace the source with a different format cover
-                      e.currentTarget.src = `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`;
+                      // Get the original URL to avoid infinite retries
+                      const originalSrc = e.currentTarget.src;
                       
-                      // If this one fails too, show the fallback
-                      e.currentTarget.onerror = () => {
+                      // Try another path format for OpenLibrary covers if this isn't already that format
+                      if (!originalSrc.includes('/covers/b/isbn/')) {
+                        // Try the direct ISBN cover endpoint
+                        const cleanIsbn = book2.isbn.replace(/[-\s]/g, '').trim();
+                        const newSrc = `https://covers.openlibrary.org/b/isbn/${cleanIsbn}-M.jpg`;
+                        console.log(`Trying alternate cover URL: ${newSrc}`);
+                        e.currentTarget.src = newSrc;
+                        
+                        // If this one fails too, show the fallback
+                        e.currentTarget.onerror = () => {
+                          console.log('Alternate image URL failed too, showing fallback');
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.parentElement.innerHTML = `
+                            <div class="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
+                              <span class="text-xs text-muted-foreground">No Cover</span>
+                            </div>
+                          `;
+                        };
+                      } else {
+                        // We're already using the direct ISBN fallback, show the no-cover element
+                        console.log('Already using ISBN fallback, showing no-cover element');
                         e.currentTarget.style.display = 'none';
                         e.currentTarget.parentElement.innerHTML = `
                           <div class="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
                             <span class="text-xs text-muted-foreground">No Cover</span>
                           </div>
                         `;
-                      };
+                      }
                     }}
                   />
                 ) : (

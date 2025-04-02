@@ -1,5 +1,12 @@
-
+import { toast } from "@/components/ui/use-toast";
 import { Book } from "./nostr";
+
+// Base OpenLibrary URL
+const OPENLIBRARY_BASE_URL = "https://openlibrary.org";
+
+// Cache configuration
+const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours for book data
+const bookCache: Record<string, { data: Record<string, Book>; timestamp: number }> = {};
 
 // Function to check if an image URL is valid/reachable
 const checkImageExists = async (url: string): Promise<boolean> => {
@@ -12,87 +19,43 @@ const checkImageExists = async (url: string): Promise<boolean> => {
   }
 };
 
-interface OpenLibraryResponse {
-  docs: {
-    key: string;
-    title: string;
-    author_name?: string[];
-    isbn?: string[];
-    cover_i?: number;
-  }[];
-  numFound: number;
-}
-
-export const searchBooks = async (query: string): Promise<Book[]> => {
-  try {
-    if (!query || query.trim() === '') return [];
-    
-    const response = await fetch(
-      `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&fields=key,title,author_name,isbn,cover_i`
-    );
-    
-    if (!response.ok) {
-      throw new Error(`OpenLibrary API error: ${response.status}`);
-    }
-    
-    const data: OpenLibraryResponse = await response.json();
-    
-    return data.docs
-      .filter(book => book.isbn && book.isbn.length > 0)
-      .map(book => ({
-        isbn: book.isbn?.[0] || '',
-        title: book.title,
-        author: book.author_name?.[0] || 'Unknown Author',
-        cover: book.cover_i 
-          ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` 
-          : undefined
-      }))
-      .slice(0, 10); // Limit to 10 results for better UX
-  } catch (error) {
-    console.error("Failed to search books:", error);
-    return [];
-  }
-};
-
-export const getBookByISBN = async (isbn: string): Promise<Book | null> => {
-  try {
-    const response = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
-    
-    if (!response.ok) {
-      throw new Error(`OpenLibrary API error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    const bookData = data[`ISBN:${isbn}`];
-    
-    if (!bookData) {
-      throw new Error(`Book with ISBN ${isbn} not found`);
-    }
-    
-    return {
-      isbn,
-      title: bookData.title,
-      author: bookData.authors?.[0]?.name || 'Unknown Author',
-      cover: bookData.cover?.medium
-    };
-  } catch (error) {
-    console.error(`Failed to get book by ISBN ${isbn}:`, error);
-    return null;
-  }
-};
-
+/**
+ * Get book information from OpenLibrary by ISBN
+ */
 export const getBooksByISBNs = async (isbns: string[]): Promise<Record<string, Book>> => {
   try {
-    // Normalize ISBNs - remove hyphens and ensure they're clean
-    const normalizedISBNs = isbns.map(isbn => isbn.replace(/[-\s]/g, '').trim());
+    // Create a cache key from sorted ISBNs to ensure consistency
+    const cacheKey = [...isbns].sort().join(',');
     
+    // Check cache first
+    const now = Date.now();
+    const cached = bookCache[cacheKey];
+    if (cached && (now - cached.timestamp < CACHE_TTL)) {
+      console.log("Using cached book data");
+      return cached.data;
+    }
+    
+    // Normalize ISBNs - remove hyphens and ensure they're clean
+    const normalizedISBNs = isbns.map(isbn => isbn.replace(/[-\\s]/g, '').trim());
+    
+    // Create comma-separated list of ISBN bibkeys
     const bibkeys = normalizedISBNs.map(isbn => `ISBN:${isbn}`).join(',');
     console.log('OpenLibrary request with bibkeys:', bibkeys);
     
-    const url = `https://openlibrary.org/api/books?bibkeys=${bibkeys}&format=json&jscmd=data`;
+    // Construct the API URL
+    const url = `${OPENLIBRARY_BASE_URL}/api/books?bibkeys=${bibkeys}&format=json&jscmd=data`;
     console.log('OpenLibrary API URL:', url);
     
-    const response = await fetch(url);
+    // Fetch data with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+    
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' }
+    });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       throw new Error(`OpenLibrary API error: ${response.status}`);
@@ -103,15 +66,21 @@ export const getBooksByISBNs = async (isbns: string[]): Promise<Record<string, B
     
     const result: Record<string, Book> = {};
     
-    normalizedISBNs.forEach((isbn, index) => {
-      const originalISBN = isbns[index]; // Keep the original ISBN for the result
-      const bookData = data[`ISBN:${isbn}`];
+    // Process each ISBN from the original list
+    for (let i = 0; i < isbns.length; i++) {
+      const originalISBN = isbns[i];
+      const normalizedISBN = normalizedISBNs[i];
+      const bookData = data[`ISBN:${normalizedISBN}`];
       
       if (bookData) {
-        // Try to get a cover URL from different sources
+        // Process book data
+        console.log(`Found data for ISBN ${originalISBN}`);
+        
+        // Try to get a cover URL with multiple fallbacks
         let coverUrl = null;
+        
+        // 1. Try cover objects from the API response
         if (bookData.cover) {
-          // Sort cover sizes by preference: medium, large, small
           if (bookData.cover.medium) {
             coverUrl = bookData.cover.medium;
           } else if (bookData.cover.large) {
@@ -121,36 +90,108 @@ export const getBooksByISBNs = async (isbns: string[]): Promise<Record<string, B
           }
         }
         
-        // If no cover found in the API response, try the direct cover URL
+        // 2. If no cover from API, try direct cover API with normalized ISBN
         if (!coverUrl) {
-          // Use the OpenLibrary cover API as a fallback
-          coverUrl = `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`;
+          coverUrl = `${OPENLIBRARY_BASE_URL}/covers/b/isbn/${normalizedISBN}-M.jpg`;
         }
-        
-        console.log(`ISBN ${originalISBN} cover URL:`, coverUrl);
         
         result[originalISBN] = {
           isbn: originalISBN,
-          title: bookData.title,
-          author: bookData.authors?.[0]?.name || 'Unknown Author',
+          title: bookData.title || `Book ${originalISBN}`,
+          author: bookData.authors?.[0]?.name || "Unknown Author",
           cover: coverUrl
         };
       } else {
-        console.log(`No data found for ISBN: ${originalISBN}`);
+        console.log(`No data found for ISBN ${originalISBN}, using fallback`);
         
-        // Even if we couldn't get book data, try to get a cover directly
+        // Create a basic fallback entry with direct cover URL
         result[originalISBN] = {
           isbn: originalISBN,
           title: `Book ${originalISBN}`,
-          author: 'Unknown Author',
-          cover: `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`
+          author: "Unknown Author",
+          cover: `${OPENLIBRARY_BASE_URL}/covers/b/isbn/${normalizedISBN}-M.jpg`
         };
       }
-    });
+    }
+    
+    // Cache the result
+    bookCache[cacheKey] = { data: result, timestamp: now };
     
     return result;
   } catch (error) {
     console.error("Failed to get books by ISBNs:", error);
+    toast({
+      title: "API Error",
+      description: "Failed to fetch book data from OpenLibrary. Please try again later.",
+      variant: "destructive",
+    });
     return {};
+  }
+};
+
+export interface SearchResult {
+  key: string;
+  title: string;
+  author_name?: string[];
+  cover_i?: number;
+  isbn?: string[];
+  first_publish_year?: number;
+}
+
+/**
+ * Search for books by title, author, etc.
+ */
+export const searchBooks = async (query: string): Promise<Book[]> => {
+  try {
+    if (!query || query.trim() === '') return [];
+    
+    const url = `${OPENLIBRARY_BASE_URL}/search.json?q=${encodeURIComponent(query)}&limit=10`;
+    console.log('Search URL:', url);
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`OpenLibrary API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log(`Search returned ${data.docs?.length || 0} results`);
+    
+    if (!data.docs || !Array.isArray(data.docs)) {
+      return [];
+    }
+    
+    // Process search results into Book objects
+    const books: Book[] = data.docs
+      .filter((doc: SearchResult) => doc.isbn && doc.isbn.length > 0)
+      .map((doc: SearchResult) => {
+        const isbn = doc.isbn?.[0] || '';
+        
+        // Generate the best possible cover URL
+        let coverUrl = '';
+        if (doc.cover_i) {
+          coverUrl = `${OPENLIBRARY_BASE_URL}/covers/b/id/${doc.cover_i}-M.jpg`;
+        } else if (isbn) {
+          const normalizedISBN = isbn.replace(/[-\\s]/g, '');
+          coverUrl = `${OPENLIBRARY_BASE_URL}/covers/b/isbn/${normalizedISBN}-M.jpg`;
+        }
+        
+        return {
+          isbn: isbn,
+          title: doc.title || 'Unknown Title',
+          author: doc.author_name?.[0] || 'Unknown Author',
+          cover: coverUrl
+        };
+      });
+    
+    return books;
+  } catch (error) {
+    console.error("Error searching books:", error);
+    toast({
+      title: "Search Error",
+      description: "Failed to search OpenLibrary. Please try again later.",
+      variant: "destructive",
+    });
+    return [];
   }
 };
