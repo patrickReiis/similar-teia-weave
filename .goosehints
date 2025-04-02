@@ -24,10 +24,12 @@ This phased approach allows for a focused initial release while setting the foun
 - shadcn-ui components library
 - Nostr protocol for decentralized data
 - WebSocket connections to Nostr relays
+- OpenLibrary API for book data
 
 ## Key Components
 - `NostrContext.tsx` - Manages authentication and Nostr connections
 - `nostr.ts` - Library for Nostr protocol interactions (connect, publish, subscribe)
+- `openlibrary.ts` - Integration with OpenLibrary API for book search and metadata
 - Main Pages:
   - Index - Home/landing page
   - Create - For creating new book similarity events
@@ -37,12 +39,19 @@ This phased approach allows for a focused initial release while setting the foun
 - Nostr Protocol - Decentralized network for social content
 - Book Similarity Events - Custom Nostr events (kind 1729) that connect two books
 - WebSocket Relays - Communication channels for Nostr events (using relay.damus.io)
+- OpenLibrary Integration - External API for book search and metadata retrieval
 
 ## Architecture
-- Context-based state management
-- Component-based UI architecture
-- WebSockets for real-time data
+- Context-based state management with React Context API
+- Component-based UI architecture with shadcn/UI components
+- WebSockets for real-time Nostr event data
 - React Query for data fetching and caching
+- Data flow model:
+  1. User searches for books using OpenLibrary API
+  2. Selected books are used to create similarity events
+  3. Events are published to Nostr relays via WebSockets
+  4. Events are fetched from relays and displayed in the UI
+  5. Book metadata is enriched with OpenLibrary API data when displayed
 
 ## Nostr Event Example
 Below is an example of a book similarity event in the Nostr protocol format:
