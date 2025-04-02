@@ -13,9 +13,7 @@ const Explore = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRetrying, setIsRetrying] = useState(false);
   const [unsubscribeFn, setUnsubscribeFn] = useState<(() => void) | null>(null);
-  // Add this ref to track if we've received any events
   const hasReceivedEvents = useRef(false);
-  // Add a ref to track loading timeout
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchEvents = useCallback(async () => {
@@ -33,7 +31,6 @@ const Explore = () => {
     
     setIsLoading(true);
     setIsRetrying(true);
-    // Reset the ref when starting a new fetch
     hasReceivedEvents.current = false;
     
     try {
@@ -50,7 +47,6 @@ const Explore = () => {
           const similarityEvent = parseEventToSimilarity(event);
           if (similarityEvent) {
             console.log("Parsed similarity event:", similarityEvent);
-            // Mark that we've received at least one event
             hasReceivedEvents.current = true;
             
             setEvents(prev => {
@@ -73,8 +69,8 @@ const Explore = () => {
       setUnsubscribeFn(() => unsubscribe);
       
       // Set a timeout to stop the loading state even if no events are received
+      // Use a shorter timeout to prevent the page from becoming unresponsive
       loadingTimeoutRef.current = setTimeout(() => {
-        // Only set loading to false if it hasn't been set already by event reception
         setIsLoading(false);
         setIsRetrying(false);
         
