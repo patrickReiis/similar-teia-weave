@@ -28,6 +28,11 @@ export function BookSearch({ onSelectBook, placeholder = "Search for a book..." 
       return;
     }
     
+    // Don't search if query is too short
+    if (query.trim().length < 3) {
+      return;
+    }
+    
     // Set loading state
     setIsLoading(true);
     
@@ -82,7 +87,11 @@ export function BookSearch({ onSelectBook, placeholder = "Search for a book..." 
             <div className="p-4 text-center text-similarteia-muted">
               {query.length < 3
                 ? "Type at least 3 characters to search"
-                : "No results found"}
+                : <div>
+                    <p className="mb-2">No books found</p>
+                    <p className="text-xs">Try adjusting your search terms.<br/>Only books with ISBNs are shown in results.</p>
+                  </div>
+              }
             </div>
           ) : (
             <div className="p-2">

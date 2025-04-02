@@ -27,7 +27,17 @@ export function BookCard({ book, className, onClick, selected }: BookCardProps) 
             <img 
               src={book.cover} 
               alt={book.title} 
-              className="w-20 h-28 object-cover rounded shadow" 
+              className="w-20 h-28 object-cover rounded shadow"
+              loading="eager"
+              onError={(e) => {
+                console.log(`Image failed to load for book ${book.title}:`, e.currentTarget.src);
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.parentElement.innerHTML = `
+                  <div class="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
+                    <span class="text-xs text-muted-foreground">No Cover</span>
+                  </div>
+                `;
+              }} 
             />
           ) : (
             <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
@@ -44,7 +54,7 @@ export function BookCard({ book, className, onClick, selected }: BookCardProps) 
             {book.author}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            ISBN: {book.isbn}
+            <span className="text-green-600">ISBN: {book.isbn}</span>
           </p>
         </div>
       </div>

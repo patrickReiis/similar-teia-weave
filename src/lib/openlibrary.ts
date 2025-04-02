@@ -8,17 +8,6 @@ const OPENLIBRARY_BASE_URL = "https://openlibrary.org";
 const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours for book data
 const bookCache: Record<string, { data: Record<string, Book>; timestamp: number }> = {};
 
-// Function to check if an image URL is valid/reachable
-const checkImageExists = async (url: string): Promise<boolean> => {
-  try {
-    const response = await fetch(url, { method: 'HEAD' });
-    return response.ok;
-  } catch (error) {
-    console.error(`Failed to check image at ${url}:`, error);
-    return false;
-  }
-};
-
 /**
  * Get book information from OpenLibrary by ISBN
  */
@@ -36,7 +25,7 @@ export const getBooksByISBNs = async (isbns: string[]): Promise<Record<string, B
     }
     
     // Normalize ISBNs - remove hyphens and ensure they're clean
-    const normalizedISBNs = isbns.map(isbn => isbn.replace(/[-\\s]/g, '').trim());
+    const normalizedISBNs = isbns.map(isbn => isbn.replace(/[-\s]/g, '').trim());
     
     // Create comma-separated list of ISBN bibkeys
     const bibkeys = normalizedISBNs.map(isbn => `ISBN:${isbn}`).join(',');
@@ -129,23 +118,18 @@ export const getBooksByISBNs = async (isbns: string[]): Promise<Record<string, B
   }
 };
 
-export interface SearchResult {
-  key: string;
-  title: string;
-  author_name?: string[];
-  cover_i?: number;
-  isbn?: string[];
-  first_publish_year?: number;
-}
-
 /**
  * Search for books by title, author, etc.
+ * Only returns books that have identifiable ISBNs.
  */
 export const searchBooks = async (query: string): Promise<Book[]> => {
   try {
     if (!query || query.trim() === '') return [];
     
-    const url = `${OPENLIBRARY_BASE_URL}/search.json?q=${encodeURIComponent(query)}&limit=10`;
+    // If query is too short, return empty array
+    if (query.trim().length < 3) return [];
+    
+    const url = `${OPENLIBRARY_BASE_URL}/search.json?q=${encodeURIComponent(query)}&limit=20`;
     console.log('Search URL:', url);
     
     const response = await fetch(url);
@@ -161,29 +145,78 @@ export const searchBooks = async (query: string): Promise<Book[]> => {
       return [];
     }
     
-    // Process search results into Book objects
-    const books: Book[] = data.docs
-      .filter((doc: SearchResult) => doc.isbn && doc.isbn.length > 0)
-      .map((doc: SearchResult) => {
-        const isbn = doc.isbn?.[0] || '';
-        
-        // Generate the best possible cover URL
-        let coverUrl = '';
-        if (doc.cover_i) {
-          coverUrl = `${OPENLIBRARY_BASE_URL}/covers/b/id/${doc.cover_i}-M.jpg`;
-        } else if (isbn) {
-          const normalizedISBN = isbn.replace(/[-\\s]/g, '');
-          coverUrl = `${OPENLIBRARY_BASE_URL}/covers/b/isbn/${normalizedISBN}-M.jpg`;
-        }
-        
-        return {
-          isbn: isbn,
-          title: doc.title || 'Unknown Title',
-          author: doc.author_name?.[0] || 'Unknown Author',
-          cover: coverUrl
-        };
-      });
+    // Filter and process books - extract ISBNs from various sources
+    const books: Book[] = [];
     
+    for (const doc of data.docs) {
+      // Skip books without title or author
+      if (!doc.title) continue;
+      
+      console.log(`Processing book: "${doc.title}" by ${doc.author_name?.[0] || 'Unknown'}`);
+      
+      // Extract ISBN from all possible sources
+      let isbn = '';
+      let isbnSource = 'none';
+      
+      // 1. Check for standard isbn arrays
+      if (doc.isbn_13 && Array.isArray(doc.isbn_13) && doc.isbn_13.length > 0) {
+        isbn = doc.isbn_13[0];
+        isbnSource = 'isbn_13';
+      } else if (doc.isbn && Array.isArray(doc.isbn) && doc.isbn.length > 0) {
+        isbn = doc.isbn[0];
+        isbnSource = 'isbn';
+      } 
+      // 2. Check the ia array for isbn prefixed entries (e.g., isbn_9781463538002)
+      else if (doc.ia && Array.isArray(doc.ia)) {
+        // Log all ia entries to help debugging
+        console.log(`Book "${doc.title}" has ${doc.ia.length} ia entries:`, doc.ia);
+        
+        for (const item of doc.ia) {
+          if (typeof item === 'string' && item.startsWith('isbn_')) {
+            // Extract the ISBN from the string
+            isbn = item.replace('isbn_', '');
+            isbnSource = 'ia_isbn';
+            break;
+          }
+        }
+      }
+      
+      console.log(`ISBN for "${doc.title}": ${isbn} (source: ${isbnSource})`);
+      
+      // If we still don't have an ISBN, skip this book
+      if (!isbn) {
+        console.log(`Skipping book "${doc.title}" - no ISBN found`);
+        continue;
+      }
+      
+      // Generate cover URL based on what's available
+      let coverUrl = '';
+      let coverSource = 'none';
+      
+      if (doc.cover_i) {
+        coverUrl = `${OPENLIBRARY_BASE_URL}/covers/b/id/${doc.cover_i}-M.jpg`;
+        coverSource = 'cover_i';
+      } else if (doc.cover_edition_key) {
+        coverUrl = `${OPENLIBRARY_BASE_URL}/covers/b/olid/${doc.cover_edition_key}-M.jpg`;
+        coverSource = 'cover_edition_key';
+      } else {
+        // Use ISBN-based cover as fallback
+        const normalizedISBN = isbn.replace(/[-\s]/g, '');
+        coverUrl = `${OPENLIBRARY_BASE_URL}/covers/b/isbn/${normalizedISBN}-M.jpg`;
+        coverSource = 'isbn_fallback';
+      }
+      
+      console.log(`Cover for "${doc.title}": ${coverUrl} (source: ${coverSource})`);
+      
+      books.push({
+        isbn: isbn,
+        title: doc.title || 'Unknown Title',
+        author: doc.author_name?.[0] || 'Unknown Author',
+        cover: coverUrl
+      });
+    }
+    
+    console.log(`Found ${books.length} books with ISBNs`);
     return books;
   } catch (error) {
     console.error("Error searching books:", error);
