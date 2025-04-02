@@ -1,6 +1,17 @@
 
 import { Book } from "./nostr";
 
+// Function to check if an image URL is valid/reachable
+const checkImageExists = async (url: string): Promise<boolean> => {
+  try {
+    const response = await fetch(url, { method: 'HEAD' });
+    return response.ok;
+  } catch (error) {
+    console.error(`Failed to check image at ${url}:`, error);
+    return false;
+  }
+};
+
 interface OpenLibraryResponse {
   docs: {
     key: string;
@@ -72,26 +83,67 @@ export const getBookByISBN = async (isbn: string): Promise<Book | null> => {
 
 export const getBooksByISBNs = async (isbns: string[]): Promise<Record<string, Book>> => {
   try {
-    const bibkeys = isbns.map(isbn => `ISBN:${isbn}`).join(',');
-    const response = await fetch(
-      `https://openlibrary.org/api/books?bibkeys=${bibkeys}&format=json&jscmd=data`
-    );
+    // Normalize ISBNs - remove hyphens and ensure they're clean
+    const normalizedISBNs = isbns.map(isbn => isbn.replace(/[-\s]/g, '').trim());
+    
+    const bibkeys = normalizedISBNs.map(isbn => `ISBN:${isbn}`).join(',');
+    console.log('OpenLibrary request with bibkeys:', bibkeys);
+    
+    const url = `https://openlibrary.org/api/books?bibkeys=${bibkeys}&format=json&jscmd=data`;
+    console.log('OpenLibrary API URL:', url);
+    
+    const response = await fetch(url);
     
     if (!response.ok) {
       throw new Error(`OpenLibrary API error: ${response.status}`);
     }
     
     const data = await response.json();
+    console.log('OpenLibrary API response:', data);
+    
     const result: Record<string, Book> = {};
     
-    isbns.forEach(isbn => {
+    normalizedISBNs.forEach((isbn, index) => {
+      const originalISBN = isbns[index]; // Keep the original ISBN for the result
       const bookData = data[`ISBN:${isbn}`];
+      
       if (bookData) {
-        result[isbn] = {
-          isbn,
+        // Try to get a cover URL from different sources
+        let coverUrl = null;
+        if (bookData.cover) {
+          // Sort cover sizes by preference: medium, large, small
+          if (bookData.cover.medium) {
+            coverUrl = bookData.cover.medium;
+          } else if (bookData.cover.large) {
+            coverUrl = bookData.cover.large;
+          } else if (bookData.cover.small) {
+            coverUrl = bookData.cover.small;
+          }
+        }
+        
+        // If no cover found in the API response, try the direct cover URL
+        if (!coverUrl) {
+          // Use the OpenLibrary cover API as a fallback
+          coverUrl = `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`;
+        }
+        
+        console.log(`ISBN ${originalISBN} cover URL:`, coverUrl);
+        
+        result[originalISBN] = {
+          isbn: originalISBN,
           title: bookData.title,
           author: bookData.authors?.[0]?.name || 'Unknown Author',
-          cover: bookData.cover?.medium
+          cover: coverUrl
+        };
+      } else {
+        console.log(`No data found for ISBN: ${originalISBN}`);
+        
+        // Even if we couldn't get book data, try to get a cover directly
+        result[originalISBN] = {
+          isbn: originalISBN,
+          title: `Book ${originalISBN}`,
+          author: 'Unknown Author',
+          cover: `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`
         };
       }
     });

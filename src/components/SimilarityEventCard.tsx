@@ -19,7 +19,9 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
       try {
         setIsLoading(true);
         const isbns = [event.book1.isbn, event.book2.isbn];
+        console.log('Fetching books for ISBNs:', isbns);
         const fetchedBooks = await getBooksByISBNs(isbns);
+        console.log('Fetched books:', fetchedBooks);
         setBooks(fetchedBooks);
       } catch (error) {
         console.error("Failed to fetch books:", error);
@@ -33,6 +35,9 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
 
   const book1 = books[event.book1.isbn] || event.book1;
   const book2 = books[event.book2.isbn] || event.book2;
+  
+  console.log('Book 1 display data:', book1);
+  console.log('Book 2 display data:', book2);
   
   // Function to truncate pubkey for display
   const formatPubkey = (pubkey: string) => {
@@ -92,6 +97,24 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
                     src={book1.cover}
                     alt={book1.title}
                     className="w-20 h-28 object-cover rounded shadow-md hover:shadow-lg transition-all"
+                    onError={(e) => {
+                      console.log('Image failed to load:', e.currentTarget.src);
+                      
+                      // Try another ISBN format for covers
+                      const isbn = book1.isbn.replace(/[-\s]/g, '').trim();
+                      // Replace the source with a different format cover
+                      e.currentTarget.src = `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`;
+                      
+                      // If this one fails too, show the fallback
+                      e.currentTarget.onerror = () => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.parentElement.innerHTML = `
+                          <div class="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
+                            <span class="text-xs text-muted-foreground">No Cover</span>
+                          </div>
+                        `;
+                      };
+                    }}
                   />
                 ) : (
                   <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
@@ -178,6 +201,24 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
                     src={book2.cover}
                     alt={book2.title}
                     className="w-20 h-28 object-cover rounded shadow-md hover:shadow-lg transition-all"
+                    onError={(e) => {
+                      console.log('Image failed to load:', e.currentTarget.src);
+                      
+                      // Try another ISBN format for covers
+                      const isbn = book2.isbn.replace(/[-\s]/g, '').trim();
+                      // Replace the source with a different format cover
+                      e.currentTarget.src = `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`;
+                      
+                      // If this one fails too, show the fallback
+                      e.currentTarget.onerror = () => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.parentElement.innerHTML = `
+                          <div class="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
+                            <span class="text-xs text-muted-foreground">No Cover</span>
+                          </div>
+                        `;
+                      };
+                    }}
                   />
                 ) : (
                   <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
