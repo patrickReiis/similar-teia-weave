@@ -15,6 +15,7 @@ export interface Book {
   title: string;
   author: string;
   cover?: string;
+  editionKey?: string | null;
 }
 
 export interface SimilarityEvent {
