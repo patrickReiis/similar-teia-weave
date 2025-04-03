@@ -11,6 +11,40 @@ const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours for book data
 const bookCache: Record<string, { data: Record<string, Book>; timestamp: number }> = {};
 
 /**
+ * Generate fallback cover URLs for a book based on its ISBN
+ * This function adds alternative ways to fetch the book cover if the primary method fails
+ */
+function generateFallbackCoverUrls(book: Book, isbn: string): void {
+  const fallbacks: string[] = [];
+  
+  // Clean the ISBN (remove hyphens and spaces)
+  const cleanIsbn = isbn.replace(/[-\s]/g, '').trim();
+  
+  // Only proceed if we have a valid ISBN
+  if (!cleanIsbn) return;
+  
+  // If the book already has a cover URL that's not ISBN-based, add an ISBN-based URL as fallback
+  if (book.cover && !book.cover.includes(`/isbn/${cleanIsbn}`)) {
+    // Add ISBN-based cover URL as fallback
+    fallbacks.push(`${COVERS_BASE_URL}/b/isbn/${cleanIsbn}-M.jpg`);
+  }
+  
+  // Try different size variant (L = large)
+  if (!book.cover?.includes('-L.jpg')) {
+    fallbacks.push(`${COVERS_BASE_URL}/b/isbn/${cleanIsbn}-L.jpg`);
+  }
+  
+  // Try alternate API format
+  fallbacks.push(`${COVERS_BASE_URL}/b/olid/ISBN:${cleanIsbn}-M.jpg`);
+  
+  // If we found any fallbacks, assign them to the book
+  if (fallbacks.length > 0) {
+    book.fallbackCoverUrls = fallbacks;
+    console.log(`Generated ${fallbacks.length} fallback cover URLs for "${book.title || book.isbn}"`);
+  }
+}
+
+/**
  * Get book information from OpenLibrary by ISBN
  */
 export const getBooksByISBNs = async (isbns: string[]): Promise<Record<string, Book>> => {
@@ -81,27 +115,38 @@ export const getBooksByISBNs = async (isbns: string[]): Promise<Record<string, B
           }
         }
         
-        // 2. If no cover from API, try direct cover API with normalized ISBN
+        // 2. If no cover from API, try to use ID-based cover URL if possible
         if (!coverUrl) {
+          // Simply try ISBN-based URL as a fallback - might not work for all books
           coverUrl = `${COVERS_BASE_URL}/b/isbn/${normalizedISBN}-M.jpg`;
         }
         
-        result[originalISBN] = {
+        const book: Book = {
           isbn: originalISBN,
           title: bookData.title || `Book ${originalISBN}`,
           author: bookData.authors?.[0]?.name || "Unknown Author",
           cover: coverUrl
         };
+        
+        // Generate alternative cover URLs to try if the primary one fails
+        generateFallbackCoverUrls(book, normalizedISBN);
+        
+        result[originalISBN] = book;
       } else {
         console.log(`No data found for ISBN ${originalISBN}, using fallback`);
         
         // Create a basic fallback entry with direct cover URL
-        result[originalISBN] = {
+        const book: Book = {
           isbn: originalISBN,
           title: `Book ${originalISBN}`,
           author: "Unknown Author",
           cover: `${COVERS_BASE_URL}/b/isbn/${normalizedISBN}-M.jpg`
         };
+        
+        // Generate fallback cover URLs even for unknown books
+        generateFallbackCoverUrls(book, normalizedISBN);
+        
+        result[originalISBN] = book;
       }
     }
     
@@ -153,21 +198,25 @@ export const searchBooks = async (query: string): Promise<Book[]> => {
       // Skip books without title
       if (!doc.title) continue;
       
-      // Extract ISBN from all possible sources
+      // Extract ISBN from all possible sources, prioritizing ISBN-13
       let isbn = '';
       
-      // 1. Check for standard isbn arrays
+      // 1. Check for ISBN-13 (highest priority)
       if (doc.isbn_13 && Array.isArray(doc.isbn_13) && doc.isbn_13.length > 0) {
         isbn = doc.isbn_13[0];
-      } else if (doc.isbn && Array.isArray(doc.isbn) && doc.isbn.length > 0) {
+        console.log(`Found ISBN-13 for "${doc.title}": ${isbn}`);
+      }
+      // 2. Fall back to ISBN-10 if no ISBN-13
+      else if (doc.isbn && Array.isArray(doc.isbn) && doc.isbn.length > 0) {
         isbn = doc.isbn[0];
-      } 
-      // 2. Check the ia array for isbn prefixed entries (e.g., isbn_9781463538002)
+        console.log(`Using ISBN-10 for "${doc.title}" as fallback: ${isbn}`);
+      }
+      // 3. Last resort - check archive.org ID for ISBN info
       else if (doc.ia && Array.isArray(doc.ia)) {
         for (const item of doc.ia) {
           if (typeof item === 'string' && item.startsWith('isbn_')) {
-            // Extract the ISBN from the string
             isbn = item.replace('isbn_', '');
+            console.log(`Using ISBN from archive.org for "${doc.title}": ${isbn}`);
             break;
           }
         }
@@ -179,13 +228,24 @@ export const searchBooks = async (query: string): Promise<Book[]> => {
       // Generate initial cover URL based on what's available in search results
       let coverUrl = '';
       
+      // Normalize the ISBN for cover URLs
+      const cleanIsbn = isbn.replace(/[-\s]/g, '').trim();
+      
+      // Cover determination priority order:
+      // 1. First try to use cover_i if available (most reliable)
       if (doc.cover_i) {
         coverUrl = `${COVERS_BASE_URL}/b/id/${doc.cover_i}-M.jpg`;
-      } else if (doc.cover_edition_key) {
+        console.log(`Using cover_i for "${doc.title}": ${doc.cover_i}`);
+      } 
+      // 2. Next try cover_edition_key
+      else if (doc.cover_edition_key) {
         coverUrl = `${COVERS_BASE_URL}/b/olid/${doc.cover_edition_key}-M.jpg`;
-      } else {
-        const normalizedISBN = isbn.replace(/[-\s]/g, '');
-        coverUrl = `${COVERS_BASE_URL}/b/isbn/${normalizedISBN}-M.jpg`;
+        console.log(`Using cover_edition_key for "${doc.title}": ${doc.cover_edition_key}`);
+      } 
+      // 3. Fallback to ISBN-based URL
+      else if (cleanIsbn) {
+        coverUrl = `${COVERS_BASE_URL}/b/isbn/${cleanIsbn}-M.jpg`;
+        console.log(`Using ISBN for cover for "${doc.title}": ${cleanIsbn}`);
       }
       
       // Create a book entry with the information we have immediately
@@ -197,6 +257,9 @@ export const searchBooks = async (query: string): Promise<Book[]> => {
         // Add edition key so we can fetch more details in the background
         editionKey: doc.cover_edition_key || null
       };
+      
+      // Generate fallback cover URLs 
+      generateFallbackCoverUrls(book, isbn);
       
       books.push(book);
     }

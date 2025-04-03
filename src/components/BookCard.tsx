@@ -2,6 +2,7 @@
 import { Book } from "@/lib/nostr";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
+import { ImageWithFallback } from "./ui/image-with-fallback";
 
 interface BookCardProps {
   book: Book;
@@ -49,20 +50,17 @@ export function BookCard({ book, className, onClick, selected }: BookCardProps) 
       <div className="flex gap-4">
         <div className="flex-shrink-0">
           {currentBook.cover ? (
-            <img 
-              src={currentBook.cover} 
-              alt={currentBook.title} 
+            <ImageWithFallback
+              src={currentBook.cover}
+              alt={currentBook.title}
+              fallbackUrls={currentBook.fallbackCoverUrls}
               className="w-20 h-28 object-cover rounded shadow"
               loading="eager"
-              onError={(e) => {
-                console.log(`Image failed to load for book ${currentBook.title}:`, e.currentTarget.src);
-                e.currentTarget.style.display = 'none';
-                e.currentTarget.parentElement.innerHTML = `
-                  <div class="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
-                    <span class="text-xs text-muted-foreground">No Cover</span>
-                  </div>
-                `;
-              }} 
+              fallbackComponent={
+                <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
+                  <span className="text-xs text-muted-foreground">No Cover</span>
+                </div>
+              }
             />
           ) : (
             <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">

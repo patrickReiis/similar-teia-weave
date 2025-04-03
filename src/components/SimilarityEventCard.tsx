@@ -2,9 +2,10 @@
 import { useEffect, useState } from "react";
 import { SimilarityEvent, Book } from "@/lib/nostr";
 import { getBooksByISBNs } from "@/lib/openlibrary";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { ImageWithFallback } from "./ui/image-with-fallback";
 
 interface SimilarityEventCardProps {
   event: SimilarityEvent;
@@ -93,46 +94,17 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
             <div className="flex gap-4 mb-4 relative">
               <div className="flex-shrink-0">
                 {book1.cover ? (
-                  <img
+                  <ImageWithFallback
                     src={book1.cover}
                     alt={book1.title}
+                    fallbackUrls={book1.fallbackCoverUrls}
                     className="w-20 h-28 object-cover rounded shadow-md hover:shadow-lg transition-all"
                     loading="eager"
-                    onError={(e) => {
-                      console.log('Image failed to load:', e.currentTarget.src);
-                      
-                      // Get the original URL to avoid infinite retries
-                      const originalSrc = e.currentTarget.src;
-                      
-                      // Try another path format for OpenLibrary covers if this isn't already that format
-                      if (!originalSrc.includes('/covers/b/isbn/')) {
-                        // Try the direct ISBN cover endpoint
-                        const cleanIsbn = book1.isbn.replace(/[-\s]/g, '').trim();
-                        const newSrc = `https://covers.openlibrary.org/b/isbn/${cleanIsbn}-M.jpg`;
-                        console.log(`Trying alternate cover URL: ${newSrc}`);
-                        e.currentTarget.src = newSrc;
-                        
-                        // If this one fails too, show the fallback
-                        e.currentTarget.onerror = () => {
-                          console.log('Alternate image URL failed too, showing fallback');
-                          e.currentTarget.style.display = 'none';
-                          e.currentTarget.parentElement.innerHTML = `
-                            <div class="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
-                              <span class="text-xs text-muted-foreground">No Cover</span>
-                            </div>
-                          `;
-                        };
-                      } else {
-                        // We're already using the direct ISBN fallback, show the no-cover element
-                        console.log('Already using ISBN fallback, showing no-cover element');
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.parentElement.innerHTML = `
-                          <div class="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
-                            <span class="text-xs text-muted-foreground">No Cover</span>
-                          </div>
-                        `;
-                      }
-                    }}
+                    fallbackComponent={
+                      <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
+                        <span className="text-xs text-muted-foreground">No Cover</span>
+                      </div>
+                    }
                   />
                 ) : (
                   <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
@@ -215,46 +187,17 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
             <div className="flex gap-4 relative">
               <div className="flex-shrink-0">
                 {book2.cover ? (
-                  <img
+                  <ImageWithFallback
                     src={book2.cover}
                     alt={book2.title}
+                    fallbackUrls={book2.fallbackCoverUrls}
                     className="w-20 h-28 object-cover rounded shadow-md hover:shadow-lg transition-all"
                     loading="eager"
-                    onError={(e) => {
-                      console.log('Image failed to load:', e.currentTarget.src);
-                      
-                      // Get the original URL to avoid infinite retries
-                      const originalSrc = e.currentTarget.src;
-                      
-                      // Try another path format for OpenLibrary covers if this isn't already that format
-                      if (!originalSrc.includes('/covers/b/isbn/')) {
-                        // Try the direct ISBN cover endpoint
-                        const cleanIsbn = book2.isbn.replace(/[-\s]/g, '').trim();
-                        const newSrc = `https://covers.openlibrary.org/b/isbn/${cleanIsbn}-M.jpg`;
-                        console.log(`Trying alternate cover URL: ${newSrc}`);
-                        e.currentTarget.src = newSrc;
-                        
-                        // If this one fails too, show the fallback
-                        e.currentTarget.onerror = () => {
-                          console.log('Alternate image URL failed too, showing fallback');
-                          e.currentTarget.style.display = 'none';
-                          e.currentTarget.parentElement.innerHTML = `
-                            <div class="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
-                              <span class="text-xs text-muted-foreground">No Cover</span>
-                            </div>
-                          `;
-                        };
-                      } else {
-                        // We're already using the direct ISBN fallback, show the no-cover element
-                        console.log('Already using ISBN fallback, showing no-cover element');
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.parentElement.innerHTML = `
-                          <div class="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
-                            <span class="text-xs text-muted-foreground">No Cover</span>
-                          </div>
-                        `;
-                      }
-                    }}
+                    fallbackComponent={
+                      <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
+                        <span className="text-xs text-muted-foreground">No Cover</span>
+                      </div>
+                    }
                   />
                 ) : (
                   <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">

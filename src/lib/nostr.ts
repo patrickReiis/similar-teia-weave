@@ -16,6 +16,7 @@ export interface Book {
   author: string;
   cover?: string;
   editionKey?: string | null;
+  fallbackCoverUrls?: string[]; // Alternative cover URLs to try if the primary one fails
 }
 
 export interface SimilarityEvent {
