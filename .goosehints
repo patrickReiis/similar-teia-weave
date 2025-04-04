@@ -25,11 +25,18 @@ This phased approach allows for a focused initial release while setting the foun
 - Nostr protocol for decentralized data
 - WebSocket connections to Nostr relays
 - OpenLibrary API for book data
+- React Query for data fetching and caching
 
 ## Key Components
 - `NostrContext.tsx` - Manages authentication and Nostr connections
 - `nostr.ts` - Library for Nostr protocol interactions (connect, publish, subscribe)
 - `openlibrary.ts` - Integration with OpenLibrary API for book search and metadata
+- `userProfiles.ts` - Fetches and manages Nostr user profiles (kind 0 events)
+- UI Components:
+  - `UserAvatar` - Displays user avatars with profile pictures and tooltips
+  - `UserName` - Shows user's name from their profile or shortened pubkey
+  - `UserProfileCard` - Comprehensive user profile display component
+  - `UserProfileMenu` - Dropdown menu for logged-in user profile
 - Main Pages:
   - Index - Home/landing page
   - Create - For creating new book similarity events
@@ -38,6 +45,7 @@ This phased approach allows for a focused initial release while setting the foun
 ## Important Concepts
 - Nostr Protocol - Decentralized network for social content
 - Book Similarity Events - Custom Nostr events (kind 1729) that connect two books
+- User Profiles - Nostr kind 0 events containing user metadata
 - WebSocket Relays - Communication channels for Nostr events (using relay.damus.io)
 - OpenLibrary Integration - External API for book search and metadata retrieval
 
@@ -52,10 +60,23 @@ This phased approach allows for a focused initial release while setting the foun
   3. Events are published to Nostr relays via WebSockets
   4. Events are fetched from relays and displayed in the UI
   5. Book metadata is enriched with OpenLibrary API data when displayed
+  6. User profiles are fetched and cached for display throughout the UI
 
-## Nostr Event Example
-Below is an example of a book similarity event in the Nostr protocol format:
+## Nostr Event Types
 
+### User Profile Event (Kind 0)
+```json
+{
+  "kind": 0,
+  "pubkey": "47259076c85f9240e852420d7213c95e95102f1de929fb60f33a2c32570c98c4",
+  "content": "{\"name\":\"John Smith\",\"picture\":\"https://example.com/avatar.jpg\",\"about\":\"Book enthusiast\",\"nip05\":\"john@example.com\"}",
+  "created_at": 1743545000,
+  "id": "...",
+  "sig": "..."
+}
+```
+
+### Book Similarity Event (Kind 1729)
 ```json
 {
   "kind": 1729,
@@ -74,17 +95,25 @@ Below is an example of a book similarity event in the Nostr protocol format:
 }
 ```
 
-Key components of the event:
-- `kind: 1729` - Custom event kind for similarity events
-- `tags` - Contains two items with ISBNs and a similarity rating
-- `content` - The user's explanation of why these books are similar
-- Other fields are standard Nostr event metadata (id, pubkey, timestamp, signature)
+## Profile System Implementation
+- The application fetches user profiles (kind 0 events) from Nostr relays
+- Profiles are cached for performance (24-hour cache duration)
+- Short subscription IDs are used for compatibility with strict relays
+- Batch fetching optimizes performance when loading multiple profiles
+- Profiles include:
+  - Display name
+  - Profile picture
+  - NIP-05 verification
+  - About text
+  - Website links
+  - Banner images
 
 ## Development Guidelines
 - Authentication requires a Nostr browser extension
 - Events are published to and fetched from Nostr relays
 - Book data structure includes ISBN, title, and author information
 - Similarity events contain two books and a similarity rating (0-1)
+- User profiles are automatically fetched and displayed throughout the UI
 - Future media types will follow a similar pattern but with different identifiers:
   - Movies will likely use IMDb IDs or similar standardized identifiers
   - Music will likely use MusicBrainz IDs, Spotify URIs, or similar identifiers

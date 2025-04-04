@@ -1,23 +1,25 @@
-
 import { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useNostr } from "@/contexts/NostrContext";
 import { Button } from "@/components/ui/button";
+import { UserProfileMenu } from "@/components/UserProfileMenu";
 
 interface LayoutProps {
   children: ReactNode;
 }
 
 export function Layout({ children }: LayoutProps) {
-  const { isAuthenticated, login, logout, isLoading } = useNostr();
+  const { isAuthenticated, login, isLoading } = useNostr();
 
   return (
     <div className="min-h-screen flex flex-col bg-similarteia-light">
       <header className="border-b bg-white sticky top-0 z-10">
         <div className="container mx-auto flex justify-between items-center py-4">
-          <Link to="/" className="text-2xl font-semibold text-similarteia-dark">
-            SimilarTeia
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link to="/" className="text-2xl font-semibold text-similarteia-dark">
+              SimilarTeia
+            </Link>
+          </div>
           
           <nav className="flex items-center space-x-4">
             <Link 
@@ -48,13 +50,7 @@ export function Layout({ children }: LayoutProps) {
                 Loading...
               </Button>
             ) : isAuthenticated ? (
-              <Button 
-                onClick={logout} 
-                variant="outline"
-                className="border-similarteia-accent text-similarteia-accent hover:bg-similarteia-accent hover:text-white"
-              >
-                Logout
-              </Button>
+              <UserProfileMenu />
             ) : (
               <Button 
                 onClick={login}

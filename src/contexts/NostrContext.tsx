@@ -1,7 +1,7 @@
-
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { getPublicKey, connectToRelay } from "@/lib/nostr";
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import { getPublicKey, connectToRelay, RELAY_URL } from "@/lib/nostr";
 import { toast } from "@/components/ui/use-toast";
+import { usePrefetchUserProfiles } from "@/lib/userProfiles";
 
 interface NostrContextType {
   isLoading: boolean;
@@ -25,7 +25,17 @@ export const NostrProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [pubkey, setPubkey] = useState<string | null>(null);
+  const prefetchProfiles = usePrefetchUserProfiles();
 
+  // When pubkey changes and is not null, prefetch the user's profile
+  useEffect(() => {
+    if (pubkey) {
+      console.log('Prefetching profile for current user:', pubkey);
+      prefetchProfiles([pubkey]);
+    }
+  }, [pubkey, prefetchProfiles]);
+
+  // Initial connection and authentication check
   useEffect(() => {
     // Try to connect to relay on mount
     connectToRelay().catch(error => {
@@ -62,7 +72,8 @@ export const NostrProvider = ({ children }: { children: ReactNode }) => {
     checkAuth();
   }, []);
 
-  const login = async () => {
+  // Create stable login function
+  const login = useCallback(async () => {
     try {
       setIsLoading(true);
       
@@ -95,16 +106,17 @@ export const NostrProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const logout = () => {
+  // Create stable logout function
+  const logout = useCallback(() => {
     setPubkey(null);
     setIsAuthenticated(false);
     toast({
       title: "Logged Out",
       description: "You've been logged out successfully.",
     });
-  };
+  }, []);
 
   return (
     <NostrContext.Provider

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Layout } from "@/components/Layout";
 import { SimilarityEventCard } from "@/components/SimilarityEventCard";
@@ -7,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
+import { usePrefetchUserProfiles } from "@/lib/userProfiles";
 
 const Explore = () => {
   const [events, setEvents] = useState<SimilarityEvent[]>([]);
@@ -15,6 +15,16 @@ const Explore = () => {
   const [unsubscribeFn, setUnsubscribeFn] = useState<(() => void) | null>(null);
   const hasReceivedEvents = useRef(false);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const prefetchProfiles = usePrefetchUserProfiles();
+
+  // Only run this effect when events array changes length
+  const eventCount = events.length;
+  useEffect(() => {
+    if (eventCount > 0) {
+      const authorPubkeys = events.map(event => event.pubkey);
+      prefetchProfiles(authorPubkeys);
+    }
+  }, [eventCount, prefetchProfiles]);
 
   const fetchEvents = useCallback(async () => {
     // Clean up previous subscription if it exists
@@ -48,6 +58,12 @@ const Explore = () => {
           if (similarityEvent) {
             console.log("Parsed similarity event:", similarityEvent);
             hasReceivedEvents.current = true;
+            
+            // Since we're going to use similarityEvent,
+            // prefetch the profile immediately
+            if (similarityEvent.pubkey) {
+              prefetchProfiles([similarityEvent.pubkey]);
+            }
             
             setEvents(prev => {
               // Check if we already have this event
@@ -98,9 +114,9 @@ const Explore = () => {
       setIsLoading(false);
       setIsRetrying(false);
     }
-  }, []); // Remove dependency on unsubscribeFn to break the cycle
+  }, [prefetchProfiles]); 
   
-  // Initial fetch
+  // Initial fetch - runs once due to empty dependency array
   useEffect(() => {
     fetchEvents();
     

@@ -34,6 +34,13 @@ export const SIMILARITY_EVENT_KIND = 1729;
 export const MAX_RETRY_COUNT = 2;
 export const RETRY_DELAY = 1000;
 
+// Generate a short subscription ID (compatible with strict relays)
+export function generateShortId(prefix: string = ''): string {
+  // Generate 8 random hex characters (4 bytes)
+  const randomStr = Math.random().toString(16).substring(2, 10);
+  return prefix ? `${prefix}${randomStr.slice(0, 6)}` : randomStr.slice(0, 8);
+}
+
 let socket: WebSocket | null = null;
 let pubkey: string | null = null;
 let connectionPromise: Promise<WebSocket> | null = null;
@@ -41,7 +48,7 @@ let connectionPromise: Promise<WebSocket> | null = null;
 export const connectToRelay = (): Promise<WebSocket> => {
   // If we already have a valid connection promise and socket, return it
   if (connectionPromise && socket && (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)) {
-    console.log("Reusing existing connection promise");
+    console.log(`Reusing existing connection promise to ${RELAY_URL}`);
     return connectionPromise;
   }
   
@@ -56,7 +63,7 @@ export const connectToRelay = (): Promise<WebSocket> => {
     
     // If we already have an open connection, use it
     if (socket && socket.readyState === WebSocket.OPEN) {
-      console.log("Using existing open WebSocket connection");
+      console.log(`Using existing open WebSocket connection to ${RELAY_URL}`);
       resolve(socket);
       return;
     }
@@ -67,17 +74,17 @@ export const connectToRelay = (): Promise<WebSocket> => {
     socket = new WebSocket(RELAY_URL);
     
     socket.onopen = () => {
-      console.log("Connected to relay:", RELAY_URL);
+      console.log(`Connected to relay: ${RELAY_URL}`);
       resolve(socket as WebSocket);
     };
     
     socket.onerror = (error) => {
-      console.error("WebSocket error:", error);
+      console.error(`WebSocket error connecting to ${RELAY_URL}:`, error);
       reject(error);
     };
     
     socket.onclose = () => {
-      console.log("Disconnected from relay");
+      console.log(`Disconnected from relay: ${RELAY_URL}`);
       socket = null;
       connectionPromise = null;
     };
@@ -126,11 +133,15 @@ export const publishEvent = async (event: NostrEvent): Promise<string> => {
       }, 10000);
       
       const messageHandler = (message: MessageEvent) => {
-        const data = JSON.parse(message.data);
-        if (data[0] === "OK" && data[1] === event.id) {
-          clearTimeout(timeoutId);
-          ws.removeEventListener("message", messageHandler);
-          resolve(data[1]);
+        try {
+          const data = JSON.parse(message.data);
+          if (data[0] === "OK" && data[1] === event.id) {
+            clearTimeout(timeoutId);
+            ws.removeEventListener("message", messageHandler);
+            resolve(data[1]);
+          }
+        } catch (e) {
+          console.error("Error parsing message:", e);
         }
       };
       
@@ -147,10 +158,11 @@ export const subscribeToEvents = async (
   filter: { kinds: number[]; [key: string]: any },
   onEvent: (event: NostrEvent) => void
 ): Promise<() => void> => {
-  const subId = Math.random().toString(36).substring(2);
+  // Generate a short subscription ID to avoid errors with strict relays
+  const subId = generateShortId("s");
   
   try {
-    console.log(`Setting up subscription with ID: ${subId}`);
+    console.log(`Setting up subscription with ID: ${subId} to relay ${RELAY_URL}`);
     // Get WebSocket connection
     const ws = await connectToRelay();
     
@@ -184,7 +196,12 @@ export const subscribeToEvents = async (
     // Set up message handler for this subscription
     const messageHandler = (message: MessageEvent) => {
       try {
+        // Log notices for debugging
         const data = JSON.parse(message.data);
+        if (data[0] === "NOTICE") {
+          console.warn(`Relay notice: ${data[1]}`);
+        }
+        
         if (data[0] === "EVENT" && data[1] === subId) {
           console.log("Received matching event:", data[2]);
           onEvent(data[2]);

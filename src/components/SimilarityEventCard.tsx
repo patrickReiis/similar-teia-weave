@@ -1,11 +1,12 @@
-
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { SimilarityEvent, Book } from "@/lib/nostr";
 import { getBooksByISBNs } from "@/lib/openlibrary";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { ImageWithFallback } from "./ui/image-with-fallback";
+import { UserAvatar, UserName } from "./UserAvatar";
+import { BookCover } from "./BookCover";
+import { usePrefetchUserProfiles } from "@/lib/userProfiles";
 
 interface SimilarityEventCardProps {
   event: SimilarityEvent;
@@ -14,36 +15,40 @@ interface SimilarityEventCardProps {
 export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
   const [books, setBooks] = useState<Record<string, Book>>({});
   const [isLoading, setIsLoading] = useState(true);
-
+  const prefetchProfiles = usePrefetchUserProfiles();
+  
+  // Prefetch the user profile when component mounts
+  // Using a separate effect with fewer dependencies to avoid unnecessary re-runs
   useEffect(() => {
-    const fetchBooks = async () => {
-      try {
-        setIsLoading(true);
-        const isbns = [event.book1.isbn, event.book2.isbn];
-        console.log('Fetching books for ISBNs:', isbns);
-        const fetchedBooks = await getBooksByISBNs(isbns);
-        console.log('Fetched books:', fetchedBooks);
-        setBooks(fetchedBooks);
-      } catch (error) {
-        console.error("Failed to fetch books:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    if (event?.pubkey) {
+      prefetchProfiles([event.pubkey]);
+    }
+  }, [event?.pubkey, prefetchProfiles]);
 
-    fetchBooks();
-  }, [event]);
+  // Books fetch effect kept separate to avoid mixing concerns
+  const fetchBooks = useCallback(async (isbns: string[]) => {
+    try {
+      setIsLoading(true);
+      console.log('Fetching books for ISBNs:', isbns);
+      const fetchedBooks = await getBooksByISBNs(isbns);
+      console.log('Fetched books:', fetchedBooks);
+      setBooks(fetchedBooks);
+    } catch (error) {
+      console.error("Failed to fetch books:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+  
+  useEffect(() => {
+    if (event?.book1?.isbn && event?.book2?.isbn) {
+      fetchBooks([event.book1.isbn, event.book2.isbn]);
+    }
+  }, [event?.book1?.isbn, event?.book2?.isbn, fetchBooks]);
 
+  // Get books from state or fallback to event data
   const book1 = books[event.book1.isbn] || event.book1;
   const book2 = books[event.book2.isbn] || event.book2;
-  
-  console.log('Book 1 display data:', book1);
-  console.log('Book 2 display data:', book2);
-  
-  // Function to truncate pubkey for display
-  const formatPubkey = (pubkey: string) => {
-    return `${pubkey.substring(0, 6)}...${pubkey.substring(pubkey.length - 4)}`;
-  };
 
   // Format date for display
   const formatDate = (timestamp: number) => {
@@ -61,8 +66,9 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
     <Card className="w-full">
       <CardHeader className="pb-2">
         <div className="flex justify-between items-center">
-          <div className="text-sm text-muted-foreground">
-            By {formatPubkey(event.pubkey)}
+          <div className="flex items-center gap-2 text-sm">
+            <UserAvatar pubkey={event.pubkey} size="sm" />
+            <UserName pubkey={event.pubkey} className="font-medium" />
           </div>
           <div className="text-sm text-muted-foreground">
             {formatDate(event.createdAt)}
@@ -93,24 +99,7 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
           <>
             <div className="flex gap-4 mb-4 relative">
               <div className="flex-shrink-0">
-                {book1.cover ? (
-                  <ImageWithFallback
-                    src={book1.cover}
-                    alt={book1.title}
-                    fallbackUrls={book1.fallbackCoverUrls}
-                    className="w-20 h-28 object-cover rounded shadow-md hover:shadow-lg transition-all"
-                    loading="eager"
-                    fallbackComponent={
-                      <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
-                        <span className="text-xs text-muted-foreground">No Cover</span>
-                      </div>
-                    }
-                  />
-                ) : (
-                  <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
-                    <span className="text-xs text-muted-foreground">No Cover</span>
-                  </div>
-                )}
+                <BookCover book={book1} />
               </div>
               
               <div className="flex-1 min-w-0">
@@ -186,24 +175,7 @@ export function SimilarityEventCard({ event }: SimilarityEventCardProps) {
             
             <div className="flex gap-4 relative">
               <div className="flex-shrink-0">
-                {book2.cover ? (
-                  <ImageWithFallback
-                    src={book2.cover}
-                    alt={book2.title}
-                    fallbackUrls={book2.fallbackCoverUrls}
-                    className="w-20 h-28 object-cover rounded shadow-md hover:shadow-lg transition-all"
-                    loading="eager"
-                    fallbackComponent={
-                      <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
-                        <span className="text-xs text-muted-foreground">No Cover</span>
-                      </div>
-                    }
-                  />
-                ) : (
-                  <div className="w-20 h-28 bg-muted flex items-center justify-center rounded shadow">
-                    <span className="text-xs text-muted-foreground">No Cover</span>
-                  </div>
-                )}
+                <BookCover book={book2} />
               </div>
               
               <div className="flex-1 min-w-0">
