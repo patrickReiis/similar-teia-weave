@@ -1,4 +1,9 @@
+import { Event, finalizeEvent, getEventHash } from 'nostr-tools';
 import { toast } from "@/components/ui/use-toast";
+import { canSignEvents, getCurrentUser } from './auth';
+
+// Re-export auth types
+export type { User } from './auth';
 
 export interface NostrEvent {
   id?: string;
@@ -42,7 +47,6 @@ export function generateShortId(prefix: string = ''): string {
 }
 
 let socket: WebSocket | null = null;
-let pubkey: string | null = null;
 let connectionPromise: Promise<WebSocket> | null = null;
 
 export const connectToRelay = (): Promise<WebSocket> => {
@@ -94,29 +98,58 @@ export const connectToRelay = (): Promise<WebSocket> => {
 };
 
 export const getPublicKey = async (): Promise<string> => {
-  if (pubkey) return pubkey;
-  
-  try {
-    if (!window.nostr) {
-      throw new Error("Nostr extension not found. Please install a Nostr extension.");
-    }
-    
-    pubkey = await window.nostr.getPublicKey();
-    return pubkey;
-  } catch (error) {
-    console.error("Failed to get public key:", error);
-    throw error;
+  const user = getCurrentUser();
+  if (!user) {
+    throw new Error("User not logged in");
   }
+  
+  return user.pubkey;
 };
 
 export const signEvent = async (event: NostrEvent): Promise<NostrEvent> => {
   try {
-    if (!window.nostr) {
-      throw new Error("Nostr extension not found");
+    const user = getCurrentUser();
+    
+    if (!user) {
+      throw new Error("User not logged in");
     }
     
-    const signedEvent = await window.nostr.signEvent(event);
-    return signedEvent;
+    if (!canSignEvents()) {
+      throw new Error("Current login method cannot sign events");
+    }
+    
+    // If using extension
+    if (user.loginMethod === 'extension') {
+      if (!window.nostr) {
+        throw new Error("Nostr extension not found");
+      }
+      
+      return await window.nostr.signEvent(event);
+    } 
+    
+    // If using private key
+    if (user.loginMethod === 'nsec' && user.privateKey) {
+      // Use nostr-tools to sign the event
+      const eventToSign = {
+        kind: event.kind,
+        tags: event.tags,
+        content: event.content,
+        created_at: event.created_at || Math.floor(Date.now() / 1000),
+        pubkey: user.pubkey,
+      } as Event;
+      
+      // Finalize the event (calculates id and adds signature)
+      const signedEvent = finalizeEvent(eventToSign, user.privateKey);
+      
+      // Return the signed event
+      return {
+        ...event,
+        id: signedEvent.id,
+        sig: signedEvent.sig
+      };
+    }
+    
+    throw new Error("No valid signing method available");
   } catch (error) {
     console.error("Failed to sign event:", error);
     throw error;
@@ -326,12 +359,3 @@ export const createSimilarityEvent = async (
     throw error;
   }
 };
-
-declare global {
-  interface Window {
-    nostr?: {
-      getPublicKey(): Promise<string>;
-      signEvent(event: NostrEvent): Promise<NostrEvent>;
-    };
-  }
-}

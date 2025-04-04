@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "@/components/Layout";
@@ -9,10 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "@/components/ui/use-toast";
 import { Book, createSimilarityEvent } from "@/lib/nostr";
-import { useNostr } from "@/contexts/NostrContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 
 const Create = () => {
-  const { isAuthenticated } = useNostr();
+  const { isAuthenticated, canSign } = useAuth();
   const navigate = useNavigate();
   
   const [book1, setBook1] = useState<Book | null>(null);
@@ -25,14 +26,35 @@ const Create = () => {
   if (!isAuthenticated) {
     toast({
       title: "Authentication Required",
-      description: "Please login with Nostr to create similarity events.",
+      description: "Please login to create similarity events.",
       variant: "destructive",
     });
     navigate("/");
     return null;
   }
 
+  // Show warning if user is in read-only mode
+  const readOnlyAlert = !canSign && (
+    <Alert variant="destructive" className="mb-6">
+      <AlertTriangle className="h-4 w-4" />
+      <AlertTitle>Read-Only Mode</AlertTitle>
+      <AlertDescription>
+        You are logged in with a public key (read-only mode). You cannot create similarity events.
+        Please login with an extension or private key to create content.
+      </AlertDescription>
+    </Alert>
+  );
+
   const handleSubmit = async () => {
+    if (!canSign) {
+      toast({
+        title: "Cannot Create Event",
+        description: "You are in read-only mode. Please login with an extension or private key.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!book1 || !book2) {
       toast({
         title: "Missing Books",
@@ -82,6 +104,8 @@ const Create = () => {
         <h1 className="text-3xl font-bold mb-6 text-similarteia-dark">
           Create Book Similarity
         </h1>
+        
+        {readOnlyAlert}
         
         <p className="text-lg text-similarteia-muted mb-8">
           Connect two books by their similarity and explain the relationship between them.
@@ -166,7 +190,7 @@ const Create = () => {
         <div className="flex justify-end">
           <Button
             onClick={handleSubmit}
-            disabled={!book1 || !book2 || !content.trim() || isSubmitting}
+            disabled={!book1 || !book2 || !content.trim() || isSubmitting || !canSign}
             className="bg-similarteia-accent hover:bg-similarteia-accent/90 text-white"
             size="lg"
           >

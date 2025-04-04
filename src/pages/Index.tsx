@@ -1,14 +1,19 @@
-
-import { useNostr } from "@/contexts/NostrContext";
+import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Layout } from "@/components/Layout";
 import { Link } from "react-router-dom";
 
 const Index = () => {
-  const { isAuthenticated, login, isLoading } = useNostr();
+  const { isAuthenticated, isLoading } = useAuth();
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  
+  const handleLoginClick = () => {
+    setShowLoginModal(true);
+  };
 
   return (
-    <Layout>
+    <Layout showLoginModal={showLoginModal} setShowLoginModal={setShowLoginModal}>
       <div className="max-w-4xl mx-auto text-center py-8">
         <h1 className="text-4xl font-bold mb-6 text-similarteia-dark">
           Discover Book Connections
@@ -22,7 +27,7 @@ const Index = () => {
         <div className="flex flex-col md:flex-row gap-4 justify-center mb-12">
           {!isAuthenticated && (
             <Button 
-              onClick={login} 
+              onClick={handleLoginClick} 
               disabled={isLoading}
               size="lg"
               className="bg-similarteia-accent hover:bg-similarteia-accent/90 text-white"
@@ -71,7 +76,7 @@ const Index = () => {
               </div>
               <h3 className="text-lg font-medium mb-2 text-similarteia-dark">Login with Nostr</h3>
               <p className="text-similarteia-muted">
-                Connect with your Nostr extension to access all features.
+                Connect with your preferred Nostr login method.
               </p>
             </div>
             

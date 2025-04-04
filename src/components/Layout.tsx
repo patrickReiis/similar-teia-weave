@@ -1,15 +1,27 @@
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { Link } from "react-router-dom";
-import { useNostr } from "@/contexts/NostrContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { UserProfileMenu } from "@/components/UserProfileMenu";
+import { LoginModal } from "@/components/LoginModal";
 
 interface LayoutProps {
   children: ReactNode;
+  showLoginModal?: boolean;
+  setShowLoginModal?: (show: boolean) => void;
 }
 
-export function Layout({ children }: LayoutProps) {
-  const { isAuthenticated, login, isLoading } = useNostr();
+export function Layout({ children, showLoginModal: propShowLoginModal, setShowLoginModal: propSetShowLoginModal }: LayoutProps) {
+  const { isAuthenticated, isLoading } = useAuth();
+  const [localShowLoginModal, setLocalShowLoginModal] = useState(false);
+  
+  // Use props if provided, otherwise use local state
+  const showLoginModal = propShowLoginModal !== undefined ? propShowLoginModal : localShowLoginModal;
+  const setShowLoginModal = propSetShowLoginModal || setLocalShowLoginModal;
+  
+  const handleLoginClick = () => {
+    setShowLoginModal(true);
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-similarteia-light">
@@ -53,10 +65,10 @@ export function Layout({ children }: LayoutProps) {
               <UserProfileMenu />
             ) : (
               <Button 
-                onClick={login}
+                onClick={handleLoginClick}
                 className="bg-similarteia-accent hover:bg-similarteia-accent/90 text-white"
               >
-                Login with Nostr
+                Login
               </Button>
             )}
           </nav>
@@ -72,6 +84,12 @@ export function Layout({ children }: LayoutProps) {
           <p>SimilarTeia &copy; {new Date().getFullYear()} - A book similarity platform powered by Nostr</p>
         </div>
       </footer>
+      
+      {/* Login Modal */}
+      <LoginModal 
+        isOpen={showLoginModal} 
+        onClose={() => setShowLoginModal(false)} 
+      />
     </div>
   );
 }
